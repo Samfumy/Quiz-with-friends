@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Quiz with Friends</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#14152B; --surface:#1F2147; --surface-hi:#262A5C; --border:#3A3D7A;
+    --coral:#FF5D73; --coral-dark:#D8425A; --gold:#FFC24B; --gold-dark:#D89E2C;
+    --mint:#43E6B5; --mint-dark:#2BB98F; --text:#F4F1FF; --text-dim:#A7A9D0;
+  }
+  *{box-sizing:border-box;} html,body{margin:0;padding:0;}
+  body{background:radial-gradient(circle at 50% -10%, #23255a 0%, var(--bg) 55%); color:var(--text); font-family:'Inter',sans-serif; min-height:100vh; display:flex; justify-content:center;}
+  #app{width:100%; max-width:480px; min-height:100vh; padding:20px 18px 32px; display:flex; flex-direction:column;}
+  h1,h2,h3{font-family:'Baloo 2',sans-serif; margin:0;}
+  .card{background:var(--surface); border:2px solid var(--border); border-radius:18px; padding:20px; box-shadow:5px 5px 0 var(--border);}
+  .stack{display:flex; flex-direction:column; gap:14px;}
+  .btn{font-family:'Baloo 2',sans-serif; font-size:17px; font-weight:600; color:var(--bg); background:var(--gold); border:none; border-radius:14px; padding:14px 18px; cursor:pointer; box-shadow:4px 4px 0 var(--gold-dark); width:100%;}
+  .btn:active{transform:translate(3px,3px); box-shadow:1px 1px 0 var(--gold-dark);}
+  .btn.secondary{background:var(--surface-hi); color:var(--text); box-shadow:4px 4px 0 var(--border);}
+  .btn.coral{background:var(--coral); box-shadow:4px 4px 0 var(--coral-dark); color:#2A0812;}
+  .btn:disabled{opacity:.35; cursor:not-allowed;}
+  input{font-family:'Inter',sans-serif; font-size:16px; padding:12px 14px; border-radius:12px; border:2px solid var(--border); background:var(--surface-hi); color:var(--text); width:100%;}
+  .pill{display:inline-block; font-size:12px; font-weight:600; padding:5px 11px; border-radius:999px; background:var(--surface-hi); border:1px solid var(--border); color:var(--text-dim);}
+  .center{text-align:center;} .muted{color:var(--text-dim); font-size:14px;}
+  .top-status{display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; font-size:13px; color:var(--text-dim);}
+  .avatar{width:40px; height:40px; border-radius:12px; background:var(--surface-hi); border:2px solid var(--border); display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:700; flex-shrink:0;}
+  .avatar.you{border-color:var(--mint);}
+  .player-row{display:flex; align-items:center; gap:12px; padding:10px 12px; border-radius:14px; background:var(--surface-hi); border:1px solid var(--border);}
+  .player-row .name{font-weight:600; font-size:15px;}
+  .player-row .score{margin-left:auto; font-family:'Baloo 2',sans-serif; font-weight:700; font-size:18px; color:var(--gold);}
+  .option-btn{text-align:left; font-size:15px; font-weight:600; padding:14px 16px; border-radius:14px; border:2px solid var(--border); background:var(--surface-hi); color:var(--text); cursor:pointer; display:flex; align-items:center; gap:10px; width:100%;}
+  .option-btn .tag{width:26px; height:26px; border-radius:8px; background:var(--bg); display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; color:var(--text-dim); flex-shrink:0;}
+  .option-btn.selected{border-color:var(--coral);}
+  .option-btn.correct{background:var(--mint); color:#04261C; border-color:var(--mint-dark);}
+  .option-btn.incorrect{background:var(--coral); color:#2A0812; border-color:var(--coral-dark);}
+  .option-btn:disabled{cursor:default;}
+  .timer-track{height:10px; border-radius:6px; background:var(--surface-hi); border:1px solid var(--border); overflow:hidden; margin-bottom:14px;}
+  .timer-fill{height:100%; background:var(--gold); transition:width 1s linear, background .3s;}
+  .boost-bar{display:flex; gap:8px; margin:14px 0; overflow-x:auto;}
+  .boost-btn{flex-shrink:0; width:64px; display:flex; flex-direction:column; align-items:center; gap:4px; background:var(--surface-hi); border:2px solid var(--border); border-radius:12px; padding:8px 4px 6px; cursor:pointer; color:var(--text); font-size:10px; font-weight:600; text-align:center;}
+  .boost-btn .icon{font-size:20px;} .boost-btn .count{font-family:'Baloo 2',sans-serif; font-size:12px; color:var(--gold);}
+  .boost-btn:disabled{opacity:.3; cursor:not-allowed;}
+  .modal-overlay{position:fixed; inset:0; background:rgba(10,10,25,.7); display:flex; align-items:center; justify-content:center; z-index:50; padding:20px;}
+  .modal{background:var(--surface); border:2px solid var(--border); border-radius:18px; padding:20px; max-width:400px; width:100%; box-shadow:6px 6px 0 var(--border);}
+  .feed-line{font-size:12.5px; color:var(--text-dim); padding:2px 0;}
+  .score-bar-outer{background:var(--surface-hi); border-radius:8px; height:14px; overflow:hidden; margin-top:6px; border:1px solid var(--border);}
+  .score-bar-inner{height:100%; background:var(--gold);}
+  .trophy{font-size:56px; text-align:center; margin-bottom:6px;}
+  .err{color:var(--coral); font-size:13px; min-height:18px;}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const API = '';
+let me = JSON.parse(localStorage.getItem('quizPlayer') || 'null');
+let state = null;
+let es = null;
+
+function el(html){ const t=document.createElement('template'); t.innerHTML=html.trim(); return t.content.firstChild; }
+async function api(path, body){
+  const r = await fetch(API+path, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body||{}) });
+  const data = await r.json();
+  if(!r.ok) throw new Error(data.error || 'Something went wrong');
+  return data;
+}
+
+function connect(code, playerId){
+  if(es) es.close();
+  es = new EventSource(`/api/league/${code}/stream?playerId=${playerId}`);
+  es.onmessage = (e) => { state = JSON.parse(e.data); render(); };
+  es.onerror = () => {};
+}
+
+if(me){ connect(me.code, me.playerId); }
+
+function render(){
+  const app = document.getElementById('app');
+  app.innerHTML = '';
+  if(!state){ app.appendChild(renderHome()); return; }
+  const map = {
+    lobby: renderLobby, categoryVote: renderCategoryVote, voteResult: renderVoteResult,
+    difficulty: renderDifficulty, quiz: renderQuiz, boosterBreak: renderBoosterBreak,
+    quizResults: renderQuizResults, leaderboard: renderLeaderboard,
+    awards: renderAwards, final: renderFinal,
+  };
+  app.appendChild((map[state.screen] || renderHome)());
+}
+
+function me_(){ return state.players.find(p => p.id === state.you); }
+
+/* ---------------- HOME ---------------- */
+function renderHome(){
+  const wrap = el(`<div class="stack fade-in" style="justify-content:center; flex:1;">
+    <div class="center" style="margin-bottom:8px;">
+      <div style="font-size:52px;">🎉🧠</div>
+      <h1 style="font-size:28px;">Quiz with Friends</h1>
+      <p class="muted">Live league &middot; play together online</p>
+    </div>
+    <div class="card stack">
+      <h3>Start a league</h3>
+      <input id="hostName" placeholder="Your name" maxlength="20">
+      <div style="display:flex; gap:8px;">
+        ${[3,4,5].map(n=>`<button class="btn secondary lenBtn" data-n="${n}" style="flex:1;">${n} quizzes</button>`).join('')}
+      </div>
+      <button class="btn coral" id="createBtn">Create league</button>
+    </div>
+    <div class="card stack">
+      <h3>Join a league</h3>
+      <input id="joinCode" placeholder="League code" maxlength="6" style="text-transform:uppercase;">
+      <input id="joinName" placeholder="Your name" maxlength="20">
+      <button class="btn" id="joinBtn">Join league</button>
+    </div>
+    <p class="err" id="homeErr"></p>
+  </div>`);
+  let len = 4;
+  wrap.querySelectorAll('.lenBtn').forEach(b=>{
+    if(parseInt(b.dataset.n)===len) b.style.background='var(--coral)';
+    b.onclick = ()=>{ len = parseInt(b.dataset.n); wrap.querySelectorAll('.lenBtn').forEach(x=>x.style.background=''); b.style.background='var(--coral)'; };
+  });
+  wrap.querySelector('#createBtn').onclick = async ()=>{
+    try{
+      const name = wrap.querySelector('#hostName').value.trim() || 'Host';
+      const data = await api('/api/league', { name, leagueLength: len });
+      me = { code: data.code, playerId: data.playerId };
+      localStorage.setItem('quizPlayer', JSON.stringify(me));
+      connect(me.code, me.playerId);
+    } catch(e){ wrap.querySelector('#homeErr').textContent = e.message; }
+  };
+  wrap.querySelector('#joinBtn').onclick = async ()=>{
+    try{
+      const code = wrap.querySelector('#joinCode').value.trim().toUpperCase();
+      const name = wrap.querySelector('#joinName').value.trim() || 'Player';
+      const data = await api(`/api/league/${code}/join`, { name });
+      me = { code, playerId: data.playerId };
+      localStorage.setItem('quizPlayer', JSON.stringify(me));
+      connect(me.code, me.playerId);
+    } catch(e){ wrap.querySelector('#homeErr').textContent = e.message; }
+  };
+  return wrap;
+}
+
+/* ---------------- LOBBY ---------------- */
+function renderLobby(){
+  const isHost = me_().isHost;
+  const wrap = el(`<div class="stack fade-in">
+    <div class="center">
+      <h2>League lobby</h2>
+      <p class="muted">Share this code with friends:</p>
+      <h1 style="font-size:40px; letter-spacing:4px;">${state.code}</h1>
+      <p class="muted">${state.leagueLength} quizzes this league</p>
+    </div>
+    <div class="card stack">
+      <p class="muted" style="margin:0;">Players (${state.players.length})</p>
+      ${state.players.map(p=>`<div class="player-row"><div class="avatar ${p.id===state.you?'you':''}">${p.name[0].toUpperCase()}</div><div class="name">${p.name}${p.id===state.you?' (you)':''}${p.isHost?' 👑':''}</div></div>`).join('')}
+    </div>
+    ${isHost ? `<button class="btn coral" id="startBtn" ${state.players.length<2?'disabled':''}>${state.players.length<2?'Need 2+ players':'Start league'}</button>` : `<p class="muted center">Waiting for the host to start...</p>`}
+  </div>`);
+  if(isHost) wrap.querySelector('#startBtn').onclick = ()=> api(`/api/league/${state.code}/start`, { playerId: state.you });
+  return wrap;
+}
+
+/* ---------------- CATEGORY VOTE ---------------- */
+function renderCategoryVote(){
+  const wrap = el(`<div class="stack fade-in">
+    <div class="top-status"><span>Quiz ${state.quizIndex+1}/${state.leagueLength}</span><span>Category vote</span></div>
+    <h2 class="center">Pick a category</h2>
+    <div class="stack" id="catList">
+      ${state.voteOptions.map(c=>`<button class="btn secondary" data-id="${c.id}" style="text-align:left; display:flex; gap:10px;"><span style="font-size:20px;">${c.emoji}</span> ${c.name}</button>`).join('')}
+    </div>
+  </div>`);
+  wrap.querySelectorAll('#catList button').forEach(b=>{
+    b.onclick = ()=>{ api(`/api/league/${state.code}/vote`, { playerId: state.you, categoryId: b.dataset.id }); wrap.querySelectorAll('#catList button').forEach(x=>x.disabled=true); };
+  });
+  return wrap;
+}
+
+function renderVoteResult(){
+  const tally = state.voteTally || {};
+  const max = Math.max(...Object.values(tally), 1);
+  const wrap = el(`<div class="stack fade-in">
+    <h2 class="center">${state.chosenCategory.emoji} ${state.chosenCategory.name} wins!</h2>
+    <div class="card stack">
+      ${state.voteOptions.map(c=>{
+        const v = tally[c.id] || 0;
+        return `<div><div style="display:flex; justify-content:space-between; font-size:13px;"><span>${c.emoji} ${c.name}</span><span class="muted">${v}</span></div>
+        <div class="score-bar-outer"><div class="score-bar-inner" style="width:${(v/max*100)}%;"></div></div></div>`;
+      }).join('')}
+    </div>
+    <p class="muted center">Next: choose difficulty...</p>
+  </div>`);
+  return wrap;
+}
+
+/* ---------------- DIFFICULTY ---------------- */
+function renderDifficulty(){
+  const isHost = me_().isHost;
+  const wrap = el(`<div class="stack fade-in">
+    <div class="top-status"><span>Quiz ${state.quizIndex+1}/${state.leagueLength}</span><span>${state.chosenCategory.name}</span></div>
+    <h2 class="center">${isHost ? 'Set the difficulty' : 'Waiting for host to pick difficulty...'}</h2>
+    ${isHost ? `<div class="stack" id="diffList">
+      <button class="btn secondary" data-d="easy">🟢 Easy</button>
+      <button class="btn secondary" data-d="medium">🟡 Medium</button>
+      <button class="btn secondary" data-d="hard">🔴 Hard</button>
+    </div>` : ''}
+  </div>`);
+  if(isHost) wrap.querySelectorAll('#diffList button').forEach(b=>{
+    b.onclick = ()=>{ api(`/api/league/${state.code}/difficulty`, { playerId: state.you, difficulty: b.dataset.d }); wrap.querySelectorAll('#diffList button').forEach(x=>x.disabled=true); };
+  });
+  return wrap;
+}
+
+/* ---------------- QUIZ ---------------- */
+function renderQuiz(){
+  const q = state.currentQuestion;
+  const you = me_();
+  const timeLeft = Math.max(0, Math.ceil((state.questionDeadline - Date.now())/1000));
+  const wrap = el(`<div class="fade-in">
+    <div class="top-status"><span>Quiz ${state.quizIndex+1}/${state.leagueLength} &middot; Q${state.questionIndex+1}/${state.questionsPerQuiz}</span><span class="pill">${state.chosenCategory.emoji} ${state.chosenDifficulty}</span></div>
+    <div class="timer-track"><div id="timerFill" class="timer-fill" style="width:${(timeLeft/5*100)}%; background:${timeLeft<=2?'var(--coral)':'var(--gold)'}"></div></div>
+    <div class="card" style="margin-bottom:14px;">
+      <div style="display:flex; justify-content:space-between;">
+        <h3 style="font-size:19px; max-width:80%;">${q.text}</h3>
+        <span id="timerLabel" class="pill">${timeLeft}s</span>
+      </div>
+    </div>
+    <div class="option-grid stack" id="optGrid">
+      ${q.options.map((text,i)=>{
+        const letters='ABCD';
+        let cls='option-btn';
+        if(state.revealed){
+          if(i===q.correctIndex) cls+=' correct';
+          else if(you.answered && i===you.lastAnswerIndex) cls+=' incorrect';
+        }
+        return `<button class="${cls}" data-i="${i}" ${you.frozenThisQuestion||you.answered||state.revealed?'disabled':''}><span class="tag">${letters[i]}</span> ${text}</button>`;
+      }).join('')}
+    </div>
+    ${you.frozenThisQuestion ? `<p class="center muted" style="margin-top:10px;">🧊 You're frozen this question!</p>` : ''}
+    <div class="stack" style="gap:8px; margin-top:14px;">
+      ${state.players.map(p=>`<div class="player-row"><div class="avatar ${p.id===state.you?'you':''}">${p.name[0].toUpperCase()}</div>
+        <div class="name">${p.name}${p.id===state.you?' (you)':''}</div>
+        <span class="muted" style="margin-left:auto; font-size:12px;">${state.revealed ? (p.lastCorrect?'✅ +'+p.lastPoints:'❌') : (p.answered?'✔️ answered':'...')}</span>
+      </div>`).join('')}
+    </div>
+  </div>`);
+  wrap.querySelectorAll('#optGrid button').forEach(b=>{
+    b.onclick = async ()=>{
+      wrap.querySelectorAll('#optGrid button').forEach(x=>x.disabled=true);
+      b.classList.add('selected');
+      try{ await api(`/api/league/${state.code}/answer`, { playerId: state.you, optionIndex: parseInt(b.dataset.i) }); }catch(e){}
+    };
+  });
+  return wrap;
+}
+
+/* ---------------- BOOSTER BREAK ---------------- */
+function renderBoosterBreak(){
+  const you = me_();
+  const ranked = state.players.slice().sort((a,b)=>b.quizScore-a.quizScore);
+  const timeLeft = Math.max(0, Math.ceil((state.breakDeadline - Date.now())/1000));
+  const wrap = el(`<div class="stack fade-in">
+    <div class="top-status"><span>Quiz ${state.quizIndex+1}/${state.leagueLength}</span><span>Booster break</span></div>
+    <h2 class="center">⚡ Booster break</h2>
+    <div class="timer-track"><div class="timer-fill" style="width:${(timeLeft/10*100)}%; background:${timeLeft<=3?'var(--coral)':'var(--mint)'}"></div></div>
+    <p class="muted center" style="margin-top:-6px;">${timeLeft}s to plan your move</p>
+    <div class="card stack">
+      <p class="muted" style="margin:0;">Standings this quiz</p>
+      ${ranked.map((p,i)=>`<div class="player-row"><div class="avatar ${p.id===state.you?'you':''}">${p.name[0].toUpperCase()}</div><div class="name">${i+1}. ${p.name}${p.id===state.you?' (you)':''}</div><div class="score">${p.quizScore}</div></div>`).join('')}
+    </div>
+    <p class="muted" style="margin:4px 0 -6px;">Your boosts</p>
+    <div class="boost-bar" id="boostBar">
+      ${Object.entries(state.boostDefs).map(([key,def])=>`
+        <button class="boost-btn" data-boost="${key}" ${(you.boosts && you.boosts[key]>0)?'':'disabled'}>
+          <span class="icon">${def.icon}</span><span>${def.name}</span><span class="count">${you.boosts ? you.boosts[key] : 0}</span>
+        </button>`).join('')}
+    </div>
+    <div>${(state.feed||[]).map(f=>`<div class="feed-line">${f}</div>`).join('')}</div>
+  </div>`);
+  wrap.querySelectorAll('#boostBar button').forEach(b=>{
+    b.onclick = ()=>openBoostTarget(b.dataset.boost);
+  });
+  return wrap;
+}
+
+function openBoostTarget(type){
+  const def = state.boostDefs[type];
+  if(!def.targeted){
+    api(`/api/league/${state.code}/boost`, { playerId: state.you, type, targetId: state.you }).catch(()=>{});
+    return;
+  }
+  const others = state.players.filter(p=>p.id!==state.you);
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `<div class="modal stack">
+    <h3>${def.icon} ${def.name}</h3>
+    <p class="muted" style="margin:0;">${def.desc}. Choose a target:</p>
+    <div class="stack" id="targetList">${others.map(p=>`<button class="btn secondary" data-id="${p.id}" style="text-align:left;">${p.name}</button>`).join('')}</div>
+    <button class="btn secondary" id="cancelBoost">Cancel</button>
+  </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#cancelBoost').onclick = ()=>overlay.remove();
+  overlay.querySelectorAll('#targetList button').forEach(b=>{
+    b.onclick = ()=>{ api(`/api/league/${state.code}/boost`, { playerId: state.you, type, targetId: b.dataset.id }).catch(()=>{}); overlay.remove(); };
+  });
+}
+
+/* ---------------- RESULTS / LEADERBOARD ---------------- */
+function renderQuizResults(){
+  const ranked = state.rankedThisQuiz;
+  const max = Math.max(...ranked.map(p=>p.quizScore), 1);
+  return el(`<div class="stack fade-in">
+    <h2 class="center">Quiz results</h2>
+    <div class="card stack">
+      ${ranked.map((p,i)=>`<div><div style="display:flex; justify-content:space-between; font-size:14px;"><span>${['🥇','🥈','🥉'][i]||(i+1)+'.'} ${p.name}${p.id===state.you?' (you)':''}</span><span class="muted">${p.quizScore} pts &middot; +${p.lastLeaguePoints}</span></div>
+      <div class="score-bar-outer"><div class="score-bar-inner" style="width:${(p.quizScore/max*100)}%;"></div></div></div>`).join('')}
+    </div>
+  </div>`);
+}
+
+function renderLeaderboard(){
+  const ranked = state.players.slice().sort((a,b)=>b.leaguePoints-a.leaguePoints);
+  return el(`<div class="stack fade-in">
+    <h2 class="center">League table</h2>
+    <p class="muted center" style="margin-top:-8px;">After quiz ${state.quizIndex+1} of ${state.leagueLength}</p>
+    <div class="card stack">
+      ${ranked.map((p,i)=>`<div class="player-row"><div class="avatar ${p.id===state.you?'you':''}">${p.name[0].toUpperCase()}</div><div class="name">${i+1}. ${p.name}${p.id===state.you?' (you)':''}</div><div class="score">${p.leaguePoints}</div></div>`).join('')}
+    </div>
+  </div>`);
+}
+
+/* ---------------- AWARDS ---------------- */
+function renderAwards(){
+  const a = state.awardsList[state.awardsStep];
+  return el(`<div class="stack fade-in center">
+    <p class="muted">Award ${state.awardsStep+1} of ${state.awardsList.length}</p>
+    <div class="trophy">${a.emoji}</div>
+    <h2>${a.title}</h2>
+    <p class="muted" style="max-width:320px; margin:0 auto;">${a.body}</p>
+  </div>`);
+}
+
+function renderFinal(){
+  const ranked = state.players.slice().sort((a,b)=>b.leaguePoints-a.leaguePoints);
+  const wrap = el(`<div class="stack fade-in">
+    <div class="trophy">🏆</div>
+    <h2 class="center">Final league table</h2>
+    <div class="card stack">
+      ${ranked.map((p,i)=>`<div class="player-row"><div class="avatar ${p.id===state.you?'you':''}">${p.name[0].toUpperCase()}</div><div class="name">${i+1}. ${p.name}${p.id===state.you?' (you)':''}</div><div class="score">${p.leaguePoints}</div></div>`).join('')}
+    </div>
+    <button class="btn coral" id="newLeagueBtn">Play a new league</button>
+  </div>`);
+  wrap.querySelector('#newLeagueBtn').onclick = ()=>{ localStorage.removeItem('quizPlayer'); me=null; state=null; if(es) es.close(); render(); };
+  return wrap;
+}
+
+setInterval(()=>{ if(state && (state.screen==='quiz' || state.screen==='boosterBreak')) render(); }, 1000);
+render();
+</script>
+</body>
+</html>
