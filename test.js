@@ -42,48 +42,43 @@ async function main(){
   openStream(code, bobId, s => { bobState = s; console.log('[Bob sees]', s.screen); });
   await sleep(400);
 
+  console.log('--- Adding 2 bots ---');
+  console.log(await post(`/api/league/${code}/addBot`, { playerId: aliceId }));
+  console.log(await post(`/api/league/${code}/addBot`, { playerId: aliceId }));
+  await sleep(300);
+  console.log('Lobby now has', aliceState.players.length, 'players:', aliceState.players.map(p=>p.name+(p.isBot?' (bot)':'')));
+
   console.log('--- Starting league ---');
   console.log(await post(`/api/league/${code}/start`, { playerId: aliceId }));
   await sleep(400);
 
+  console.log('--- Alice votes, waiting for bots to auto-vote ---');
   const catId = aliceState.voteOptions[0].id;
-  console.log('--- Both vote for', catId, '---');
   await post(`/api/league/${code}/vote`, { playerId: aliceId, categoryId: catId });
   await post(`/api/league/${code}/vote`, { playerId: bobId, categoryId: catId });
-  await sleep(500);
-  console.log('Chosen category:', aliceState.chosenCategory);
+  await sleep(3000); // give bots time to auto-vote and trigger tally
+  console.log('Chosen category:', aliceState.chosenCategory, 'screen:', aliceState.screen);
 
   await sleep(3200); // wait for voteResult -> difficulty transition
   console.log('--- Host picks easy difficulty ---');
   console.log(await post(`/api/league/${code}/difficulty`, { playerId: aliceId, difficulty: 'easy' }));
-  await sleep(400);
-  console.log('Question 1:', aliceState.currentQuestion);
+  await sleep(1000);
+  console.log('Question 1 up. Waiting for bots to auto-answer...');
+  await sleep(5200); // let the full 5s question + bot answers play out
+  console.log('Revealed:', aliceState.revealed);
+  console.log('Players after Q1:', aliceState.players.map(p => ({n:p.name, bot:p.isBot, answered:p.answered, correct:p.lastCorrect, pts:p.lastPoints})));
 
-  console.log('--- Alice answers correct option, Bob answers wrong ---');
-  const correctIdx = 0; // we don't know true correctIndex (hidden), just answer something for both
-  await post(`/api/league/${code}/answer`, { playerId: aliceId, optionIndex: 0 });
-  await post(`/api/league/${code}/answer`, { playerId: bobId, optionIndex: 1 });
-  await sleep(400);
-  console.log('Revealed?', aliceState.revealed, 'players:', aliceState.players.map(p => ({n:p.name, correct:p.lastCorrect, pts:p.lastPoints})));
-
-  await sleep(3000); // reveal pause + next question load
-  console.log('Now on:', aliceState.screen, 'question index', aliceState.questionIndex);
-
-  // Answer question 2 for both to trigger early reveal, then should hit booster break
-  if(aliceState.screen === 'quiz'){
-    await post(`/api/league/${code}/answer`, { playerId: aliceId, optionIndex: 0 });
-    await post(`/api/league/${code}/answer`, { playerId: bobId, optionIndex: 0 });
-    await sleep(300);
-    console.log('Early reveal check -> revealed:', aliceState.revealed);
-    await sleep(3000);
-  }
-  console.log('Screen after Q2:', aliceState.screen);
+  await sleep(3200); // reveal pause -> loads Q2
+  console.log('--- Waiting for Q2 to auto-resolve (bots answer on their own) ---');
+  await sleep(5200);
+  console.log('Screen after Q2 resolves + advance:', aliceState.screen);
+  await sleep(1000);
+  console.log('Screen now (should be boosterBreak):', aliceState.screen);
 
   if(aliceState.screen === 'boosterBreak'){
-    console.log('--- Bob freezes Alice for next question ---');
-    console.log(await post(`/api/league/${code}/boost`, { playerId: bobId, type: 'freeze', targetId: aliceId }));
-    await sleep(300);
-    console.log('Feed:', aliceState.feed, 'Alice frozenNextQuestion applied via boosts count:', bobState.players.find(p=>p.id===bobId).boostsUsedCount);
+    await sleep(3000);
+    console.log('Feed after bots had a chance to use boosts:', aliceState.feed);
+    console.log('Bot boost charges remaining:', aliceState.players.filter(p=>p.isBot).map(p=>({n:p.name, boosts:p.boosts})));
   }
 
   await sleep(200);

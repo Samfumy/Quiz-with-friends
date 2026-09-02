@@ -132,4 +132,11 @@ const BOOST_DEFS = {
   x2:     {icon:'⚡', name:'Double Up', desc:"Double your points for 3 questions", targeted:false},
 };
 
-module.exports = { CATEGORIES, QUESTION_BANK, BOOST_DEFS };
+const BOT_PROFILES = [
+  {name:'Byte', emoji:'🤖', skill:0.12},
+  {name:'Pixel', emoji:'👾', skill:0.0},
+  {name:'Ziggy', emoji:'🦊', skill:-0.08},
+  {name:'Nova', emoji:'🌙', skill:0.06},
+];
+
+module.exports = { CATEGORIES, QUESTION_BANK, BOOST_DEFS, BOT_PROFILES };

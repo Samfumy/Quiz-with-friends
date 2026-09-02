@@ -2,7 +2,7 @@ const http = require('http');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const { CATEGORIES, QUESTION_BANK, BOOST_DEFS } = require('./data');
+const { CATEGORIES, QUESTION_BANK, BOOST_DEFS, BOT_PROFILES } = require('./data');
 
 const PORT = process.env.PORT || 8787;
 const QUESTIONS_PER_QUIZ = 10;
@@ -22,9 +22,9 @@ function genCode(){ return Math.random().toString(36).slice(2,6).toUpperCase(); 
 function genId(){ return crypto.randomBytes(6).toString('hex'); }
 function freshBoosts(){ return {freeze:1, swap:1, halve:1, hide:1, x2:1}; }
 
-function newPlayer(name, isHost){
+function newPlayer(name, isHost, isBot, skill){
   return {
-    id: genId(), name, isHost: !!isHost, connected: true,
+    id: genId(), name, isHost: !!isHost, isBot: !!isBot, skill: skill || 0, connected: true,
     leaguePoints: 0, quizScore: 0, quizScoresHistory: [],
     correctCount: 0, boostsUsedCount: 0,
     boosts: freshBoosts(), hideCounter: 0, x2Counter: 0,
@@ -32,6 +32,16 @@ function newPlayer(name, isHost){
     answered: false, answerIndex: null, answerTime: null,
     lastPoints: 0, lastCorrect: false,
   };
+}
+
+function addBot(league){
+  const botCount = league.players.filter(p => p.isBot).length;
+  const profile = BOT_PROFILES[botCount % BOT_PROFILES.length];
+  const bot = newPlayer(profile.name, false, true, profile.skill);
+  bot.emoji = profile.emoji;
+  league.players.push(bot);
+  broadcast(league);
+  return bot;
 }
 
 function findPlayer(league, id){ return league.players.find(p=>p.id===id); }
@@ -66,7 +76,7 @@ function buildPayloadFor(league, viewerId){
     hostId: league.hostId,
     you: viewerId,
     players: league.players.map(p => ({
-      id: p.id, name: p.name, isHost: p.isHost, connected: p.connected,
+      id: p.id, name: p.name, isHost: p.isHost, isBot: p.isBot, emoji: p.emoji, connected: p.connected,
       leaguePoints: p.leaguePoints, quizScore: p.quizScore,
       correctCount: p.correctCount, boostsUsedCount: p.boostsUsedCount,
       boosts: p.id === viewerId ? p.boosts : undefined,
@@ -100,6 +110,25 @@ function broadcast(league){
 }
 
 /* ---------- Game flow ---------- */
+function castVote(league, player, categoryId){
+  if(league.votesCast.has(player.id) || league.voteTally[categoryId] === undefined) return;
+  league.voteTally[categoryId] += 1;
+  league.votesCast.add(player.id);
+  broadcast(league);
+  const connectedCount = league.players.filter(p => p.connected).length;
+  if(league.votesCast.size >= connectedCount) tallyVotes(league);
+}
+
+function botsVote(league){
+  league.players.filter(p => p.isBot).forEach(bot => {
+    setTimeout(() => {
+      if(league.screen !== 'categoryVote') return;
+      const choice = league.voteOptions[Math.floor(Math.random() * league.voteOptions.length)];
+      castVote(league, bot, choice.id);
+    }, 400 + Math.random() * 2000);
+  });
+}
+
 function beginQuizSetup(league){
   league.voteOptions = pick(CATEGORIES, 4);
   league.voteTally = {};
@@ -108,6 +137,7 @@ function beginQuizSetup(league){
   league.screen = 'categoryVote';
   broadcast(league);
   setLeagueTimer(league, VOTE_TIME_MS, () => tallyVotes(league));
+  botsVote(league);
 }
 
 function tallyVotes(league){
@@ -171,7 +201,41 @@ function loadQuestion(league){
     p.answerTime = null;
   });
   broadcast(league);
+  botsAnswer(league);
   setLeagueTimer(league, QUESTION_TIME_MS, () => revealAnswer(league));
+}
+
+function submitAnswer(league, player, optionIndex, atTime){
+  if(league.screen !== 'quiz' || league.revealed) return false;
+  if(!player || player.frozenThisQuestion || player.answered) return false;
+  player.answered = true;
+  player.answerIndex = optionIndex;
+  player.answerTime = atTime;
+  return true;
+}
+
+function botsAnswer(league){
+  const correctIndex = league.currentQuestion.correctIndex;
+  const diffAcc = {easy:0.75, medium:0.55, hard:0.40}[league.chosenDifficulty];
+  league.players.filter(p => p.isBot).forEach(bot => {
+    if(bot.frozenThisQuestion) return;
+    const delay = 400 + Math.random() * (QUESTION_TIME_MS - 700);
+    setTimeout(() => {
+      if(league.screen !== 'quiz' || league.revealed) return;
+      let acc = diffAcc + (bot.skill || 0);
+      if(bot.hideCounter > 0) acc = 0.22;
+      const willBeCorrect = Math.random() < acc;
+      let choice = correctIndex;
+      if(!willBeCorrect){
+        const wrongOptions = [0,1,2,3].filter(i => i !== correctIndex);
+        choice = wrongOptions[Math.floor(Math.random() * wrongOptions.length)];
+      }
+      if(submitAnswer(league, bot, choice, Date.now())){
+        broadcast(league);
+        checkEarlyReveal(league);
+      }
+    }, delay);
+  });
 }
 
 function checkEarlyReveal(league){
@@ -222,12 +286,32 @@ function advanceQuestion(league){
   }
 }
 
+function botsUseBoosts(league){
+  league.players.filter(p => p.isBot).forEach(bot => {
+    const available = Object.entries(bot.boosts).filter(([k,v]) => v > 0).map(([k]) => k);
+    if(available.length === 0) return;
+    if(Math.random() < 0.3){
+      setTimeout(() => {
+        if(league.screen !== 'boosterBreak') return;
+        const type = available[Math.floor(Math.random() * available.length)];
+        let target = bot;
+        if(type !== 'x2'){
+          const others = league.players.filter(p => p.id !== bot.id);
+          target = others[Math.floor(Math.random() * others.length)] || bot;
+        }
+        applyBoost(league, bot, type, target);
+      }, 500 + Math.random() * 4000);
+    }
+  });
+}
+
 function enterBoosterBreak(league){
   clearLeagueTimer(league);
   league.screen = 'boosterBreak';
   league.feed = [];
   league.breakDeadline = Date.now() + BREAK_TIME_MS;
   broadcast(league);
+  botsUseBoosts(league);
   setLeagueTimer(league, BREAK_TIME_MS, () => loadQuestion(league));
 }
 
@@ -406,6 +490,31 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { playerId: player.id });
   }
 
+  if(parts[0] === 'api' && parts[1] === 'league' && parts[3] === 'addBot' && req.method === 'POST'){
+    const league = leagues.get(parts[2]);
+    if(!league) return send(res, 404, { error: 'League not found' });
+    if(league.screen !== 'lobby') return send(res, 400, { error: 'League already started' });
+    const body = await readBody(req);
+    const player = findPlayer(league, body.playerId);
+    if(!player || !player.isHost) return send(res, 403, { error: 'Only the host can add bots' });
+    if(league.players.length >= 8) return send(res, 400, { error: 'League is full' });
+    const bot = addBot(league);
+    return send(res, 200, { botId: bot.id });
+  }
+
+  if(parts[0] === 'api' && parts[1] === 'league' && parts[3] === 'removeBot' && req.method === 'POST'){
+    const league = leagues.get(parts[2]);
+    if(!league) return send(res, 404, { error: 'League not found' });
+    if(league.screen !== 'lobby') return send(res, 400, { error: 'League already started' });
+    const body = await readBody(req);
+    const player = findPlayer(league, body.playerId);
+    if(!player || !player.isHost) return send(res, 403, { error: 'Only the host can remove bots' });
+    const idx = league.players.findIndex(p => p.id === body.botId && p.isBot);
+    if(idx >= 0) league.players.splice(idx, 1);
+    broadcast(league);
+    return send(res, 200, { ok: true });
+  }
+
   if(parts[0] === 'api' && parts[1] === 'league' && parts[3] === 'start' && req.method === 'POST'){
     const league = leagues.get(parts[2]);
     if(!league) return send(res, 404, { error: 'League not found' });
@@ -424,11 +533,7 @@ const server = http.createServer(async (req, res) => {
     const player = findPlayer(league, body.playerId);
     if(!player) return send(res, 404, { error: 'Unknown player' });
     if(!league.votesCast.has(player.id) && league.voteTally[body.categoryId] !== undefined){
-      league.voteTally[body.categoryId] += 1;
-      league.votesCast.add(player.id);
-      broadcast(league);
-      const connectedCount = league.players.filter(p => p.connected).length;
-      if(league.votesCast.size >= connectedCount) tallyVotes(league);
+      castVote(league, player, body.categoryId);
     }
     return send(res, 200, { ok: true });
   }
@@ -450,10 +555,7 @@ const server = http.createServer(async (req, res) => {
     if(!league || league.screen !== 'quiz' || league.revealed) return send(res, 400, { error: 'Not answering right now' });
     const body = await readBody(req);
     const player = findPlayer(league, body.playerId);
-    if(!player || player.frozenThisQuestion || player.answered) return send(res, 400, { error: 'Cannot answer' });
-    player.answered = true;
-    player.answerIndex = body.optionIndex;
-    player.answerTime = Date.now();
+    if(!submitAnswer(league, player, body.optionIndex, Date.now())) return send(res, 400, { error: 'Cannot answer' });
     broadcast(league);
     checkEarlyReveal(league);
     return send(res, 200, { ok: true });

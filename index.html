@@ -156,11 +156,26 @@ function renderLobby(){
     </div>
     <div class="card stack">
       <p class="muted" style="margin:0;">Players (${state.players.length})</p>
-      ${state.players.map(p=>`<div class="player-row"><div class="avatar ${p.id===state.you?'you':''}">${p.name[0].toUpperCase()}</div><div class="name">${p.name}${p.id===state.you?' (you)':''}${p.isHost?' 👑':''}</div></div>`).join('')}
+      ${state.players.map(p=>`<div class="player-row">
+        <div class="avatar ${p.id===state.you?'you':''}">${p.isBot ? (p.emoji||'🤖') : p.name[0].toUpperCase()}</div>
+        <div class="name">${p.name}${p.id===state.you?' (you)':''}${p.isHost?' 👑':''}${p.isBot?' &middot; bot':''}</div>
+        ${isHost && p.isBot ? `<button class="btn secondary rmBotBtn" data-id="${p.id}" style="width:auto; padding:6px 12px; font-size:12px; margin-left:auto;">Remove</button>` : ''}
+      </div>`).join('')}
     </div>
+    ${isHost ? `<button class="btn secondary" id="addBotBtn" ${state.players.length>=8?'disabled':''}>${state.players.length>=8?'League full':'+ Add a bot'}</button>` : ''}
     ${isHost ? `<button class="btn coral" id="startBtn" ${state.players.length<2?'disabled':''}>${state.players.length<2?'Need 2+ players':'Start league'}</button>` : `<p class="muted center">Waiting for the host to start...</p>`}
+    <p class="err" id="lobbyErr"></p>
   </div>`);
-  if(isHost) wrap.querySelector('#startBtn').onclick = ()=> api(`/api/league/${state.code}/start`, { playerId: state.you });
+  if(isHost){
+    wrap.querySelector('#startBtn').onclick = ()=> api(`/api/league/${state.code}/start`, { playerId: state.you });
+    wrap.querySelector('#addBotBtn').onclick = async ()=>{
+      try{ await api(`/api/league/${state.code}/addBot`, { playerId: state.you }); }
+      catch(e){ wrap.querySelector('#lobbyErr').textContent = e.message; }
+    };
+    wrap.querySelectorAll('.rmBotBtn').forEach(b=>{
+      b.onclick = ()=> api(`/api/league/${state.code}/removeBot`, { playerId: state.you, botId: b.dataset.id });
+    });
+  }
   return wrap;
 }
 
@@ -241,7 +256,7 @@ function renderQuiz(){
     </div>
     ${you.frozenThisQuestion ? `<p class="center muted" style="margin-top:10px;">🧊 You're frozen this question!</p>` : ''}
     <div class="stack" style="gap:8px; margin-top:14px;">
-      ${state.players.map(p=>`<div class="player-row"><div class="avatar ${p.id===state.you?'you':''}">${p.name[0].toUpperCase()}</div>
+      ${state.players.map(p=>`<div class="player-row"><div class="avatar ${p.id===state.you?'you':''}">${p.isBot ? (p.emoji||'🤖') : p.name[0].toUpperCase()}</div>
         <div class="name">${p.name}${p.id===state.you?' (you)':''}</div>
         <span class="muted" style="margin-left:auto; font-size:12px;">${state.revealed ? (p.lastCorrect?'✅ +'+p.lastPoints:'❌') : (p.answered?'✔️ answered':'...')}</span>
       </div>`).join('')}
@@ -269,7 +284,7 @@ function renderBoosterBreak(){
     <p class="muted center" style="margin-top:-6px;">${timeLeft}s to plan your move</p>
     <div class="card stack">
       <p class="muted" style="margin:0;">Standings this quiz</p>
-      ${ranked.map((p,i)=>`<div class="player-row"><div class="avatar ${p.id===state.you?'you':''}">${p.name[0].toUpperCase()}</div><div class="name">${i+1}. ${p.name}${p.id===state.you?' (you)':''}</div><div class="score">${p.quizScore}</div></div>`).join('')}
+      ${ranked.map((p,i)=>`<div class="player-row"><div class="avatar ${p.id===state.you?'you':''}">${p.isBot ? (p.emoji||'🤖') : p.name[0].toUpperCase()}</div><div class="name">${i+1}. ${p.name}${p.id===state.you?' (you)':''}</div><div class="score">${p.quizScore}</div></div>`).join('')}
     </div>
     <p class="muted" style="margin:4px 0 -6px;">Your boosts</p>
     <div class="boost-bar" id="boostBar">
@@ -327,7 +342,7 @@ function renderLeaderboard(){
     <h2 class="center">League table</h2>
     <p class="muted center" style="margin-top:-8px;">After quiz ${state.quizIndex+1} of ${state.leagueLength}</p>
     <div class="card stack">
-      ${ranked.map((p,i)=>`<div class="player-row"><div class="avatar ${p.id===state.you?'you':''}">${p.name[0].toUpperCase()}</div><div class="name">${i+1}. ${p.name}${p.id===state.you?' (you)':''}</div><div class="score">${p.leaguePoints}</div></div>`).join('')}
+      ${ranked.map((p,i)=>`<div class="player-row"><div class="avatar ${p.id===state.you?'you':''}">${p.isBot ? (p.emoji||'🤖') : p.name[0].toUpperCase()}</div><div class="name">${i+1}. ${p.name}${p.id===state.you?' (you)':''}</div><div class="score">${p.leaguePoints}</div></div>`).join('')}
     </div>
   </div>`);
 }
@@ -349,7 +364,7 @@ function renderFinal(){
     <div class="trophy">🏆</div>
     <h2 class="center">Final league table</h2>
     <div class="card stack">
-      ${ranked.map((p,i)=>`<div class="player-row"><div class="avatar ${p.id===state.you?'you':''}">${p.name[0].toUpperCase()}</div><div class="name">${i+1}. ${p.name}${p.id===state.you?' (you)':''}</div><div class="score">${p.leaguePoints}</div></div>`).join('')}
+      ${ranked.map((p,i)=>`<div class="player-row"><div class="avatar ${p.id===state.you?'you':''}">${p.isBot ? (p.emoji||'🤖') : p.name[0].toUpperCase()}</div><div class="name">${i+1}. ${p.name}${p.id===state.you?' (you)':''}</div><div class="score">${p.leaguePoints}</div></div>`).join('')}
     </div>
     <button class="btn coral" id="newLeagueBtn">Play a new league</button>
   </div>`);
