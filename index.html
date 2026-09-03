@@ -82,6 +82,7 @@ function render(){
   const app = document.getElementById('app');
   app.innerHTML = '';
   if(!state){ app.appendChild(renderHome()); return; }
+  if(state.screen !== 'quiz') app.appendChild(renderTopBar());
   const map = {
     lobby: renderLobby, categoryVote: renderCategoryVote, voteResult: renderVoteResult,
     difficulty: renderDifficulty, quiz: renderQuiz, boosterBreak: renderBoosterBreak,
@@ -89,6 +90,22 @@ function render(){
     awards: renderAwards, final: renderFinal,
   };
   app.appendChild((map[state.screen] || renderHome)());
+}
+
+function renderTopBar(){
+  const bar = el(`<div style="display:flex; justify-content:flex-end; margin-bottom:6px;">
+    <button id="leaveBtn" style="background:none; border:none; color:var(--text-dim); font-size:13px; cursor:pointer; padding:4px 2px;">🏠 Leave</button>
+  </div>`);
+  bar.querySelector('#leaveBtn').onclick = leaveLeague;
+  return bar;
+}
+
+function leaveLeague(){
+  if(!confirm('Leave this league and go back to the home screen?')) return;
+  localStorage.removeItem('quizPlayer');
+  if(es) es.close();
+  me = null; state = null;
+  render();
 }
 
 function me_(){ return state.players.find(p => p.id === state.you); }
@@ -100,6 +117,12 @@ function renderHome(){
       <div style="font-size:52px;">🎉🧠</div>
       <h1 style="font-size:28px;">Quiz with Friends</h1>
       <p class="muted">Live league &middot; play together online</p>
+    </div>
+    <div class="card stack">
+      <h3>⚡ Quick play</h3>
+      <p class="muted" style="margin:0;">Get matched into an open public league with strangers (bots fill in if it's quiet).</p>
+      <input id="quickName" placeholder="Your name" maxlength="20">
+      <button class="btn mint" id="quickBtn" style="color:#04261C;">Find a game</button>
     </div>
     <div class="card stack">
       <h3>Start a league</h3>
@@ -122,6 +145,15 @@ function renderHome(){
     if(parseInt(b.dataset.n)===len) b.style.background='var(--coral)';
     b.onclick = ()=>{ len = parseInt(b.dataset.n); wrap.querySelectorAll('.lenBtn').forEach(x=>x.style.background=''); b.style.background='var(--coral)'; };
   });
+  wrap.querySelector('#quickBtn').onclick = async ()=>{
+    try{
+      const name = wrap.querySelector('#quickName').value.trim() || 'Player';
+      const data = await api('/api/quickplay', { name });
+      me = { code: data.code, playerId: data.playerId };
+      localStorage.setItem('quizPlayer', JSON.stringify(me));
+      connect(me.code, me.playerId);
+    } catch(e){ wrap.querySelector('#homeErr').textContent = e.message; }
+  };
   wrap.querySelector('#createBtn').onclick = async ()=>{
     try{
       const name = wrap.querySelector('#hostName').value.trim() || 'Host';
@@ -147,12 +179,15 @@ function renderHome(){
 /* ---------------- LOBBY ---------------- */
 function renderLobby(){
   const isHost = me_().isHost;
+  const countdown = state.autoStartAt ? Math.max(0, Math.ceil((state.autoStartAt - Date.now())/1000)) : null;
   const wrap = el(`<div class="stack fade-in">
     <div class="center">
       <h2>League lobby</h2>
+      ${state.isPublic ? `<p class="pill" style="display:inline-block;">🌐 Public quick play</p>` : ''}
       <p class="muted">Share this code with friends:</p>
       <h1 style="font-size:40px; letter-spacing:4px;">${state.code}</h1>
       <p class="muted">${state.leagueLength} quizzes this league</p>
+      ${countdown !== null ? `<p class="muted">⏱ Auto-starting in ${countdown}s (bots will fill empty seats)</p>` : ''}
     </div>
     <div class="card stack">
       <p class="muted" style="margin:0;">Players (${state.players.length})</p>
@@ -372,7 +407,7 @@ function renderFinal(){
   return wrap;
 }
 
-setInterval(()=>{ if(state && (state.screen==='quiz' || state.screen==='boosterBreak')) render(); }, 1000);
+setInterval(()=>{ if(state && (state.screen==='quiz' || state.screen==='boosterBreak' || (state.screen==='lobby' && state.autoStartAt))) render(); }, 1000);
 render();
 </script>
 </body>

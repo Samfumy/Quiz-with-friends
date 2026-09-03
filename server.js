@@ -13,6 +13,9 @@ const RESULTS_PAUSE_MS = 4000;
 const AWARD_PAUSE_MS = 4000;
 const VOTE_TIME_MS = 15000;
 const DIFFICULTY_TIME_MS = 15000;
+const QUICKPLAY_MAX_PLAYERS = 6;
+const QUICKPLAY_WAIT_MS = 15000;
+const QUICKPLAY_TARGET_SIZE = 4;
 
 const leagues = new Map();
 
@@ -42,6 +45,19 @@ function addBot(league){
   league.players.push(bot);
   broadcast(league);
   return bot;
+}
+
+function scheduleQuickplayWait(league){
+  clearLeagueTimer(league);
+  league.autoStartAt = Date.now() + QUICKPLAY_WAIT_MS;
+  broadcast(league);
+  setLeagueTimer(league, QUICKPLAY_WAIT_MS, () => {
+    if(league.screen !== 'lobby') return;
+    while(league.players.length < QUICKPLAY_TARGET_SIZE){
+      addBot(league);
+    }
+    beginQuizSetup(league);
+  });
 }
 
 function findPlayer(league, id){ return league.players.find(p=>p.id===id); }
@@ -74,6 +90,8 @@ function buildPayloadFor(league, viewerId){
     leagueLength: league.leagueLength,
     quizIndex: league.quizIndex,
     hostId: league.hostId,
+    isPublic: !!league.isPublic,
+    autoStartAt: league.autoStartAt || null,
     you: viewerId,
     players: league.players.map(p => ({
       id: p.id, name: p.name, isHost: p.isHost, isBot: p.isBot, emoji: p.emoji, connected: p.connected,
@@ -130,6 +148,7 @@ function botsVote(league){
 }
 
 function beginQuizSetup(league){
+  league.autoStartAt = null;
   league.voteOptions = pick(CATEGORIES, 4);
   league.voteTally = {};
   league.voteOptions.forEach(c => league.voteTally[c.id] = 0);
@@ -463,6 +482,35 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, CATEGORIES);
   }
 
+  if(parts[0] === 'api' && parts[1] === 'quickplay' && req.method === 'POST'){
+    const body = await readBody(req);
+    const name = (body.name || 'Player').slice(0, 20);
+    let league = null;
+    for(const lg of leagues.values()){
+      if(lg.isPublic && lg.screen === 'lobby' && lg.players.length < QUICKPLAY_MAX_PLAYERS){
+        league = lg;
+        break;
+      }
+    }
+    let player;
+    if(league){
+      player = newPlayer(name, false);
+      league.players.push(player);
+    } else {
+      const code = genCode();
+      player = newPlayer(name, true);
+      league = {
+        code, hostId: player.id, leagueLength: 4, players: [player],
+        quizIndex: 0, screen: 'lobby', sseClients: new Map(), feed: [],
+        timer: null, isPublic: true,
+      };
+      leagues.set(code, league);
+    }
+    broadcast(league);
+    scheduleQuickplayWait(league);
+    return send(res, 200, { code: league.code, playerId: player.id });
+  }
+
   if(parts[0] === 'api' && parts[1] === 'league' && !parts[2] && req.method === 'POST'){
     const body = await readBody(req);
     const name = (body.name || 'Host').slice(0, 20);
@@ -472,7 +520,7 @@ const server = http.createServer(async (req, res) => {
     const league = {
       code, hostId: host.id, leagueLength, players: [host],
       quizIndex: 0, screen: 'lobby', sseClients: new Map(), feed: [],
-      timer: null,
+      timer: null, isPublic: false,
     };
     leagues.set(code, league);
     return send(res, 200, { code, playerId: host.id });
@@ -522,6 +570,8 @@ const server = http.createServer(async (req, res) => {
     const player = findPlayer(league, body.playerId);
     if(!player || !player.isHost) return send(res, 403, { error: 'Only the host can start' });
     if(league.players.length < 2) return send(res, 400, { error: 'Need at least 2 players' });
+    clearLeagueTimer(league);
+    league.autoStartAt = null;
     beginQuizSetup(league);
     return send(res, 200, { ok: true });
   }
